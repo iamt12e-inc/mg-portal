@@ -2,7 +2,7 @@ name: Build Linux packages
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
 
 permissions:
   contents: read
@@ -11,10 +11,19 @@ jobs:
   build:
     name: AppImage, Debian, and RPM
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      app_version: ${{ steps.app_version.outputs.version }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Read app version
+        id: app_version
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -n "$version"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -142,7 +151,6 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,7 +165,9 @@ jobs:
       - name: Publish release and attach packages
         uses: softprops/action-gh-release@v3
         with:
-          name: Mugonat Portal ${{ github.ref_name }} (build ${{ github.run_number }}.${{ github.run_attempt }})
+          tag_name: v${{ needs.build.outputs.app_version }}-build${{ github.run_number }}.${{ github.run_attempt }}
+          target_commitish: ${{ github.sha }}
+          name: Mugonat Portal ${{ needs.build.outputs.app_version }} (build ${{ github.run_number }}.${{ github.run_attempt }})
           generate_release_notes: true
           files: dist/*
           fail_on_unmatched_files: true
