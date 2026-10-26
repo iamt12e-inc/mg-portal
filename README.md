@@ -10,4 +10,4 @@ GitHub Releases provide an AppImage, Debian package, and RPM. In Settings, turn 
 
 ## Publish a release
 
-Bump the version in `Cargo.toml`, create a matching tag such as `v0.1.1`, and push it. GitHub Actions builds the installers on Blacksmith and attaches them to the release.
+The app version in `Cargo.toml` changes when you choose to publish a new app release. Push a matching `v*` tag to build and publish the installers. Each build and retry gets an automatic number in the package revisions and AppImage filename.

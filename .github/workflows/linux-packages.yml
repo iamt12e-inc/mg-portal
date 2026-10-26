@@ -2,10 +2,7 @@ name: Build Linux packages
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,7 +28,7 @@ jobs:
           sudo apt-get install --yes debootstrap
 
           focal_root="$RUNNER_TEMP/mugonat-ubuntu-focal"
-          sudo debootstrap --arch=amd64 --variant=minbase --components=main,universe focal "$focal_root" http://old-releases.ubuntu.com/ubuntu/
+          sudo debootstrap --arch=amd64 --variant=minbase --components=main,universe focal "$focal_root" http://archive.ubuntu.com/ubuntu/
           sudo mkdir -p "$focal_root/proc" "$focal_root/sys" "$focal_root/dev/pts" "$focal_root$HOME/.cargo" "$focal_root$HOME/.rustup" "$focal_root$GITHUB_WORKSPACE"
           sudo python3 - "$focal_root/etc/resolv.conf" <<'PY'
           from pathlib import Path
@@ -86,20 +83,23 @@ jobs:
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
             PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
-            /bin/bash -c 'cd "$WORKSPACE" && cargo deb --locked'
+            BUILD_REVISION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            /bin/bash -c 'cd "$WORKSPACE" && cargo deb --locked --deb-revision "$BUILD_REVISION"'
 
       - name: Build RPM package
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
             PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
-            /bin/bash -c 'cd "$WORKSPACE" && strip -s target/release/mugonat-portal && cargo generate-rpm'
+            BUILD_REVISION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            /bin/bash -c 'cd "$WORKSPACE" && strip -s target/release/mugonat-portal && cargo generate-rpm --set-metadata "release = \"$BUILD_REVISION\""'
 
       - name: Build AppImage
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
             PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            BUILD_REVISION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             APPIMAGE_EXTRACT_AND_RUN=1 \
             /bin/bash -c '
               cd "$WORKSPACE"
@@ -122,7 +122,7 @@ jobs:
                 --output appimage
               appimage_file="$(find . -maxdepth 1 -type f -name "*.AppImage" -print -quit)"
               test -n "$appimage_file"
-              mv "$appimage_file" dist/mugonat-portal-x86_64.AppImage
+              mv "$appimage_file" "dist/mugonat-portal-build${BUILD_REVISION}-x86_64.AppImage"
             '
 
       - name: Collect installable packages
@@ -157,7 +157,7 @@ jobs:
       - name: Publish release and attach packages
         uses: softprops/action-gh-release@v3
         with:
-          name: Mugonat Portal ${{ github.ref_name }}
+          name: Mugonat Portal ${{ github.ref_name }} (build ${{ github.run_number }}.${{ github.run_attempt }})
           generate_release_notes: true
           files: dist/*
           fail_on_unmatched_files: true
