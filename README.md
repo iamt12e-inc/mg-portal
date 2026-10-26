@@ -26,7 +26,9 @@ cargo run
 
 ## Linux installers
 
-The GitHub Actions workflow builds an AppImage, a Debian package, and an RPM on Blacksmith whenever `main` changes, when a pull request is opened, or when started manually. Download the `mugonat-portal-linux-installers` artifact from a completed workflow run to get all three installers.
+The GitHub Actions workflow builds an AppImage, a Debian package, and an RPM on Blacksmith whenever `main` changes, when a pull request is opened, or when started manually. Those runs upload a `mugonat-portal-linux-installers` artifact.
+
+For a versioned release, update the package version in `Cargo.toml` and push a matching version tag such as `v0.1.1`. The workflow builds the installers on Blacksmith and publishes them as assets on the GitHub Release for that tag, with generated release notes.
 
 The AppImage bundles the application and its GTK libraries. Debian and RPM packages install the launcher, app icon, and desktop metadata in the standard system locations; they rely on the host's NetworkManager and desktop libraries.
 
