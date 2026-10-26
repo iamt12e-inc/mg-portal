@@ -86,6 +86,7 @@ jobs:
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
             PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" CC=clang \
+            MUGONAT_BUILD_NUMBER="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             /bin/bash -c 'cd "$WORKSPACE" && cargo clean --release && cargo build --release --locked'
 
       - name: Build Debian package

@@ -8,6 +8,14 @@ Supports `Mugonat Systems 5.0` and `Mugonat Systems 2.4`. Sign-in details are st
 
 GitHub Releases provide an AppImage, Debian package, and RPM. In Settings, turn on **Start when you sign in** to keep the app running in the background.
 
-## Publish a release
+## Versioning and builds
 
-The app version in `Cargo.toml` changes when you choose to publish a new app release. Push a matching `v*` tag to build and publish the installers. Each build and retry gets an automatic number in the package revisions and AppImage filename.
+The version in `Cargo.toml` is the app version shown in Settings and used by the packages. Bump it when you choose to publish a new app version; regular fixes and builds do not need a version bump.
+
+Every push to `main` builds the AppImage, Debian package, and RPM. After a successful build, the workflow publishes a GitHub release and creates a tag in this format:
+
+```text
+v<app-version>-build<run-number>.<attempt>
+```
+
+For example, `v0.1.2-build9.1` is app version `0.1.2`, workflow run `9`, first attempt. A rerun of the same workflow increments the attempt number. Each release tag points to the commit that was built. The app shows both its version and build number in Settings.

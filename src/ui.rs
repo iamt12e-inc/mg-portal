@@ -544,6 +544,22 @@ fn build_window(
     background_section.append(&background_feedback);
     settings_content.append(&background_section);
 
+    settings_content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+
+    let about_heading = section_heading("About");
+    let version_label = helper_label(&format!("Version {}", env!("CARGO_PKG_VERSION")));
+    let build_number = env!("MUGONAT_BUILD_NUMBER");
+    let build_label = if build_number == "local" {
+        helper_label("Development build")
+    } else {
+        helper_label(&format!("Build {build_number}"))
+    };
+    let about_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    about_section.append(&about_heading);
+    about_section.append(&version_label);
+    about_section.append(&build_label);
+    settings_content.append(&about_section);
+
     let status_page = page_with_scrollbar(&status_scroll);
     let settings_page = page_with_scrollbar(&settings_scroll);
     stack.add_titled(&status_page, "connection", "Connection");
