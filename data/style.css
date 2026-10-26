@@ -16,30 +16,30 @@
 }
 
 .status-card.status-online {
-  background-color: alpha(@success_color, 0.12);
+  background-color: rgba(34, 139, 84, 0.12);
 }
 
 .status-card.status-online .status-icon {
-  color: @success_color;
-  background-color: alpha(@success_color, 0.18);
+  color: #18834f;
+  background-color: rgba(34, 139, 84, 0.18);
 }
 
 .status-card.status-attention {
-  background-color: alpha(@warning_color, 0.12);
+  background-color: rgba(191, 125, 26, 0.12);
 }
 
 .status-card.status-attention .status-icon {
-  color: @warning_color;
-  background-color: alpha(@warning_color, 0.18);
+  color: #a86200;
+  background-color: rgba(191, 125, 26, 0.18);
 }
 
 .status-card.status-error {
-  background-color: alpha(@error_color, 0.10);
+  background-color: rgba(194, 46, 46, 0.10);
 }
 
 .status-card.status-error .status-icon {
-  color: @error_color;
-  background-color: alpha(@error_color, 0.16);
+  color: #c22e2e;
+  background-color: rgba(194, 46, 46, 0.16);
 }
 
 .settings-input {
@@ -47,6 +47,9 @@
 }
 
 switch.autostart-enabled {
-  color: @theme_selected_fg_color;
-  background-color: @theme_selected_bg_color;
+  background-color: #3584e4;
+}
+
+switch.autostart-enabled slider {
+  background-color: #ffffff;
 }

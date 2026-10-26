@@ -39,7 +39,7 @@ struct Widgets {
     network_save_button: gtk::Button,
     network_feedback: gtk::Label,
     username_entry: gtk::Entry,
-    password_entry: gtk::PasswordEntry,
+    password_entry: gtk::Entry,
     credentials_save_button: gtk::Button,
     credentials_feedback: gtk::Label,
     auto_start_switch: gtk::Switch,
@@ -173,29 +173,27 @@ pub fn install(app: &gtk::Application, settings: Arc<Mutex<Settings>>) {
         } else {
             app.activate();
         }
-        glib::ExitCode::SUCCESS
+        0
     });
 }
 
 fn install_styles() {
-    let Some(display) = gtk::gdk::Display::default() else {
+    let Some(screen) = gtk::gdk::Screen::default() else {
         return;
     };
     let provider = gtk::CssProvider::new();
-    provider.load_from_data(include_str!("../data/style.css"));
-    gtk::style_context_add_provider_for_display(
-        &display,
+    let _ = provider.load_from_data(include_str!("../data/style.css").as_bytes());
+    gtk::StyleContext::add_provider_for_screen(
+        &screen,
         &provider,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 }
 
 fn section_heading(text: &str) -> gtk::Label {
-    gtk::Label::builder()
-        .label(text)
-        .xalign(0.0)
-        .css_classes(["heading"])
-        .build()
+    let label = gtk::Label::builder().label(text).xalign(0.0).build();
+    label.style_context().add_class("heading");
+    label
 }
 
 fn helper_label(text: &str) -> gtk::Label {
@@ -204,8 +202,19 @@ fn helper_label(text: &str) -> gtk::Label {
         .xalign(0.0)
         .wrap(true)
         .build();
-    label.add_css_class("dim-label");
+    label.style_context().add_class("dim-label");
     label
+}
+
+trait BoxAppendExt {
+    fn append(&self, child: &impl IsA<gtk::Widget>);
+}
+
+impl BoxAppendExt for gtk::Box {
+    fn append(&self, child: &impl IsA<gtk::Widget>) {
+        let child = child.as_ref();
+        self.pack_start(child, child.hexpands() || child.vexpands(), true, 0);
+    }
 }
 
 fn page_with_scrollbar(scroll: &gtk::ScrolledWindow) -> gtk::Box {
@@ -239,9 +248,9 @@ fn show_feedback(label: &gtk::Label, text: &str) {
 
 fn set_auto_start_style(switch: &gtk::Switch, enabled: bool) {
     if enabled {
-        switch.add_css_class("autostart-enabled");
+        switch.style_context().add_class("autostart-enabled");
     } else {
-        switch.remove_css_class("autostart-enabled");
+        switch.style_context().remove_class("autostart-enabled");
     }
 }
 
@@ -265,11 +274,12 @@ fn build_window(
         .build();
 
     let header = gtk::HeaderBar::new();
-    header.set_show_title_buttons(true);
+    header.set_show_close_button(true);
     let window_title = gtk::Label::new(Some("Mugonat Portal"));
-    header.set_title_widget(Some(&window_title));
+    header.set_custom_title(Some(&window_title));
 
-    let refresh_button = gtk::Button::from_icon_name("view-refresh-symbolic");
+    let refresh_button =
+        gtk::Button::from_icon_name(Some("view-refresh-symbolic"), gtk::IconSize::Button);
     refresh_button.set_tooltip_text(Some("Check your connection now"));
     header.pack_end(&refresh_button);
     window.set_titlebar(Some(&header));
@@ -296,7 +306,7 @@ fn build_window(
     switcher.set_margin_bottom(4);
     root.append(&switcher);
     root.append(&stack);
-    window.set_child(Some(&root));
+    window.add(&root);
 
     let status_scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
@@ -309,7 +319,7 @@ fn build_window(
     status_content.set_margin_bottom(8);
     status_content.set_margin_start(18);
     status_content.set_margin_end(18);
-    status_scroll.set_child(Some(&status_content));
+    status_scroll.add(&status_content);
 
     let settings_scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
@@ -322,36 +332,39 @@ fn build_window(
     settings_content.set_margin_bottom(12);
     settings_content.set_margin_start(22);
     settings_content.set_margin_end(22);
-    settings_scroll.set_child(Some(&settings_content));
+    settings_scroll.add(&settings_content);
 
     let status_title = gtk::Label::builder()
         .label("Starting up")
         .xalign(0.0)
         .wrap(true)
-        .css_classes(["title-2"])
         .build();
+    status_title.style_context().add_class("title-2");
     let status_detail = gtk::Label::builder()
         .label("Checking your Wi-Fi connection.")
         .xalign(0.0)
         .wrap(true)
         .build();
-    status_detail.add_css_class("status-detail");
+    status_detail.style_context().add_class("status-detail");
     let status_copy = gtk::Box::new(gtk::Orientation::Vertical, 8);
     status_copy.set_valign(gtk::Align::Center);
     status_copy.append(&status_title);
     status_copy.append(&status_detail);
-    let status_icon = gtk::Image::from_icon_name("network-wireless-symbolic");
+    let status_icon =
+        gtk::Image::from_icon_name(Some("network-wireless-symbolic"), gtk::IconSize::Dialog);
     status_icon.set_pixel_size(40);
-    status_icon.add_css_class("status-icon");
+    status_icon.style_context().add_class("status-icon");
     status_icon.set_valign(gtk::Align::Center);
     let status_card = gtk::Box::new(gtk::Orientation::Horizontal, 18);
-    status_card.add_css_class("status-card");
+    status_card.style_context().add_class("status-card");
     status_card.append(&status_icon);
     status_card.append(&status_copy);
     status_content.append(&status_card);
 
     let try_sign_in_button = gtk::Button::with_label("Try sign-in again");
-    try_sign_in_button.add_css_class("suggested-action");
+    try_sign_in_button
+        .style_context()
+        .add_class("suggested-action");
     try_sign_in_button.set_halign(gtk::Align::Start);
     try_sign_in_button.set_visible(false);
 
@@ -361,15 +374,15 @@ fn build_window(
         .selectable(true)
         .wrap(true)
         .build();
-    portal_address.add_css_class("dim-label");
+    portal_address.style_context().add_class("dim-label");
     let portal_heading = gtk::Label::builder()
         .label("Sign-in page")
         .xalign(0.0)
-        .css_classes(["heading"])
         .build();
+    portal_heading.style_context().add_class("heading");
     let open_portal_button = gtk::Button::with_label("Open sign-in page");
     open_portal_button.set_sensitive(false);
-    open_portal_button.add_css_class("flat");
+    open_portal_button.style_context().add_class("flat");
     open_portal_button.set_halign(gtk::Align::Start);
     let portal_section = gtk::Box::new(gtk::Orientation::Vertical, 10);
     portal_section.append(&portal_heading);
@@ -379,7 +392,7 @@ fn build_window(
     status_content.append(&portal_section);
 
     let hotspot_status_button = gtk::Button::with_label("View hotspot usage");
-    hotspot_status_button.add_css_class("flat");
+    hotspot_status_button.style_context().add_class("flat");
     hotspot_status_button.set_halign(gtk::Align::Start);
     let connection_actions = gtk::FlowBox::builder()
         .selection_mode(gtk::SelectionMode::None)
@@ -396,8 +409,8 @@ fn build_window(
     let settings_heading = gtk::Label::builder()
         .label("Settings")
         .xalign(0.0)
-        .css_classes(["title-2"])
         .build();
+    settings_heading.style_context().add_class("title-2");
     settings_content.append(&settings_heading);
     let settings_description =
         helper_label("Choose which Wi-Fi networks to watch and save your portal sign-in details.");
@@ -411,19 +424,21 @@ fn build_window(
     network_view.set_bottom_margin(8);
     network_view.set_left_margin(8);
     network_view.set_right_margin(8);
-    network_view
-        .buffer()
-        .set_text(&snapshot.target_networks.join("\n"));
+    if let Some(buffer) = network_view.buffer() {
+        buffer.set_text(&snapshot.target_networks.join("\n"));
+    }
     let network_scroll = gtk::ScrolledWindow::builder()
         .min_content_height(96)
         .hscrollbar_policy(gtk::PolicyType::Never)
-        .child(&network_view)
         .build();
+    network_scroll.add(&network_view);
     let network_frame = gtk::Frame::new(None);
-    network_frame.add_css_class("settings-input");
-    network_frame.set_child(Some(&network_scroll));
+    network_frame.style_context().add_class("settings-input");
+    network_frame.add(&network_scroll);
     let network_save_button = gtk::Button::with_label("Save Wi-Fi networks");
-    network_save_button.add_css_class("suggested-action");
+    network_save_button
+        .style_context()
+        .add_class("suggested-action");
     network_save_button.set_halign(gtk::Align::End);
     let network_feedback = helper_label("Changes apply after you save the network list.");
     let network_section = gtk::Box::new(gtk::Orientation::Vertical, 10);
@@ -443,12 +458,42 @@ fn build_window(
     if let Some(username) = saved_username.as_deref() {
         username_entry.set_text(&username);
     }
-    let password_entry = gtk::PasswordEntry::builder()
+    let password_entry = gtk::Entry::builder()
         .placeholder_text("Portal password")
-        .show_peek_icon(true)
+        .visibility(false)
+        .input_purpose(gtk::InputPurpose::Password)
         .build();
+    password_entry.set_icon_from_icon_name(
+        gtk::EntryIconPosition::Secondary,
+        Some("view-reveal-symbolic"),
+    );
+    password_entry.set_icon_activatable(gtk::EntryIconPosition::Secondary, true);
+    password_entry.set_icon_tooltip_text(
+        gtk::EntryIconPosition::Secondary,
+        Some("Show password"),
+    );
+    password_entry.connect_icon_press(|entry, position, _event| {
+        if position == gtk::EntryIconPosition::Secondary {
+            let visible = !entry.property::<bool>("visibility");
+            entry.set_visibility(visible);
+            entry.set_icon_from_icon_name(
+                gtk::EntryIconPosition::Secondary,
+                Some(if visible {
+                    "view-conceal-symbolic"
+                } else {
+                    "view-reveal-symbolic"
+                }),
+            );
+            entry.set_icon_tooltip_text(
+                gtk::EntryIconPosition::Secondary,
+                Some(if visible { "Hide password" } else { "Show password" }),
+            );
+        }
+    });
     let credentials_save_button = gtk::Button::with_label("Save sign-in details");
-    credentials_save_button.add_css_class("suggested-action");
+    credentials_save_button
+        .style_context()
+        .add_class("suggested-action");
     credentials_save_button.set_halign(gtk::Align::End);
     let credential_description = if saved_username.is_some() {
         "Your username is saved. Re-enter the password to save sign-in details."
@@ -501,8 +546,8 @@ fn build_window(
 
     let status_page = page_with_scrollbar(&status_scroll);
     let settings_page = page_with_scrollbar(&settings_scroll);
-    stack.add_titled(&status_page, Some("connection"), "Connection");
-    stack.add_titled(&settings_page, Some("settings"), "Settings");
+    stack.add_titled(&status_page, "connection", "Connection");
+    stack.add_titled(&settings_page, "settings", "Settings");
 
     let widgets = Widgets {
         window: window.clone(),
@@ -545,7 +590,7 @@ fn build_window(
     connect_auto_start(&widgets, background_sender);
 
     let window = widgets.window.clone();
-    window.connect_close_request(|window| {
+    window.connect_delete_event(|window, _event| {
         window.hide();
         glib::Propagation::Stop
     });
@@ -728,7 +773,7 @@ fn apply_status(widgets: &Widgets, status: &AppStatus) {
     widgets.status_detail.set_text(&status.detail);
 
     for class in ["status-online", "status-attention", "status-error"] {
-        widgets.status_card.remove_css_class(class);
+        widgets.status_card.style_context().remove_class(class);
     }
     let (icon, state_class) = match &status.kind {
         StatusKind::Disconnected => ("network-wireless-symbolic", None),
@@ -739,9 +784,11 @@ fn apply_status(widgets: &Widgets, status: &AppStatus) {
         }
         StatusKind::Error => ("dialog-error-symbolic", Some("status-error")),
     };
-    widgets.status_icon.set_icon_name(Some(icon));
+    widgets
+        .status_icon
+        .set_from_icon_name(Some(icon), gtk::IconSize::Dialog);
     if let Some(class) = state_class {
-        widgets.status_card.add_css_class(class);
+        widgets.status_card.style_context().add_class(class);
     }
 
     widgets
@@ -794,8 +841,12 @@ fn handle_status_attention(app: &gtk::Application, status: &AppStatus) {
 }
 
 fn text_view_lines(view: &gtk::TextView) -> Vec<String> {
-    let buffer = view.buffer();
-    let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+    let Some(buffer) = view.buffer() else {
+        return Vec::new();
+    };
+    let Some(text) = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false) else {
+        return Vec::new();
+    };
     let mut lines = Vec::new();
     for line in text.lines() {
         let line = line.trim();

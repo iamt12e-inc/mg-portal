@@ -25,56 +25,109 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
-      - name: Install build dependencies
+      - name: Prepare Ubuntu 20.04 build environment
         run: |
           sudo apt-get update
-          sudo apt-get install --yes \
-            build-essential \
-            libdbus-1-dev \
-            libgtk-4-dev \
-            libsecret-1-dev \
-            patchelf \
-            pkg-config \
-            rpm \
-            wget
+          sudo apt-get install --yes debootstrap
+
+          focal_root="$RUNNER_TEMP/mugonat-ubuntu-focal"
+          sudo debootstrap --arch=amd64 --variant=minbase --components=main,universe focal "$focal_root" http://old-releases.ubuntu.com/ubuntu/
+          sudo mkdir -p "$focal_root/proc" "$focal_root/sys" "$focal_root/dev/pts" "$focal_root$HOME/.cargo" "$focal_root$HOME/.rustup" "$focal_root$GITHUB_WORKSPACE"
+          sudo python3 - "$focal_root/etc/resolv.conf" <<'PY'
+          from pathlib import Path
+          import sys
+
+          resolver = Path(sys.argv[1])
+          resolver.unlink(missing_ok=True)
+          resolver.write_bytes(Path("/etc/resolv.conf").read_bytes())
+          PY
+          sudo mount --bind /dev "$focal_root/dev"
+          sudo mount --bind /dev/pts "$focal_root/dev/pts"
+          sudo mount -t proc proc "$focal_root/proc"
+          sudo mount -t sysfs sysfs "$focal_root/sys"
+          sudo mount --bind "$HOME/.cargo" "$focal_root$HOME/.cargo"
+          sudo mount --bind "$HOME/.rustup" "$focal_root$HOME/.rustup"
+          sudo mount --bind "$GITHUB_WORKSPACE" "$focal_root$GITHUB_WORKSPACE"
+          echo "MUGONAT_FOCAL_ROOT=$focal_root" >> "$GITHUB_ENV"
+
+          sudo chroot "$focal_root" /usr/bin/env DEBIAN_FRONTEND=noninteractive \
+            apt-get -o Acquire::Check-Valid-Until=false update
+          sudo chroot "$focal_root" /usr/bin/env DEBIAN_FRONTEND=noninteractive \
+            apt-get -o Acquire::Check-Valid-Until=false install --yes --no-install-recommends \
+              build-essential \
+              ca-certificates \
+              file \
+              libdbus-1-dev \
+              libgirepository1.0-dev \
+              libgtk-3-dev \
+              libsecret-1-dev \
+              librsvg2-dev \
+              libgdk-pixbuf2.0-bin \
+              pkg-config \
+              rpm \
+              wget
 
       - name: Install Debian and RPM packagers
         run: |
-          cargo install cargo-deb --locked
-          cargo install cargo-generate-rpm --locked
+          sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
+            HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            /bin/bash -c 'cd "$WORKSPACE" && cargo install cargo-deb --locked && cargo install cargo-generate-rpm --locked'
 
       - name: Build application
-        run: cargo build --release --locked
+        run: |
+          sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
+            HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            /bin/bash -c 'cd "$WORKSPACE" && cargo build --release --locked'
 
       - name: Build Debian package
-        run: cargo deb
+        run: |
+          sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
+            HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            /bin/bash -c 'cd "$WORKSPACE" && cargo deb --locked'
 
       - name: Build RPM package
         run: |
-          strip -s target/release/mugonat-portal
-          cargo generate-rpm
+          sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
+            HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            /bin/bash -c 'cd "$WORKSPACE" && strip -s target/release/mugonat-portal && cargo generate-rpm'
 
       - name: Build AppImage
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
-          mkdir -p tmp dist
-          wget --quiet \
-            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
-            --output-document=tmp/linuxdeploy.AppImage
-          chmod +x tmp/linuxdeploy.AppImage
-          tmp/linuxdeploy.AppImage \
-            --appdir AppDir \
-            --executable target/release/mugonat-portal \
-            --desktop-file data/io.github.tanaka_mambinge.MugonatPortal.desktop \
-            --icon-file data/icons/hicolor/512x512/apps/mugonat-portal.png \
-            --output appimage
-          appimage_file="$(find . -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
-          test -n "$appimage_file"
-          mv "$appimage_file" dist/mugonat-portal-x86_64.AppImage
+          sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
+            HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            APPIMAGE_EXTRACT_AND_RUN=1 \
+            /bin/bash -c '
+              cd "$WORKSPACE"
+              mkdir -p tmp dist
+              wget --quiet \
+                https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+                --output-document=tmp/linuxdeploy.AppImage
+              wget --quiet \
+                https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh \
+                --output-document=tmp/linuxdeploy-plugin-gtk.sh
+              chmod +x tmp/linuxdeploy.AppImage
+              chmod +x tmp/linuxdeploy-plugin-gtk.sh
+              export DEPLOY_GTK_VERSION=3
+              tmp/linuxdeploy.AppImage \
+                --appdir AppDir \
+                --executable target/release/mugonat-portal \
+                --desktop-file data/io.github.tanaka_mambinge.MugonatPortal.desktop \
+                --icon-file data/icons/hicolor/512x512/apps/mugonat-portal.png \
+                --plugin gtk \
+                --output appimage
+              appimage_file="$(find . -maxdepth 1 -type f -name "*.AppImage" -print -quit)"
+              test -n "$appimage_file"
+              mv "$appimage_file" dist/mugonat-portal-x86_64.AppImage
+            '
 
       - name: Collect installable packages
         run: |
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.cargo" "$HOME/.rustup" target dist AppDir tmp
           cp target/debian/*.deb dist/
           cp target/generate-rpm/*.rpm dist/
           ls -lh dist
