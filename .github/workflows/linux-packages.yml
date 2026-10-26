@@ -62,6 +62,7 @@ jobs:
             apt-get -o Acquire::Check-Valid-Until=false install --yes --no-install-recommends \
               build-essential \
               ca-certificates \
+              clang \
               file \
               libdbus-1-dev \
               libgirepository1.0-dev \
@@ -77,21 +78,21 @@ jobs:
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
-            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" CC=clang \
             /bin/bash -c 'cd "$WORKSPACE" && cargo install cargo-deb --locked --force && cargo install cargo-generate-rpm --locked --force'
 
       - name: Build application
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
-            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" CC=clang \
             /bin/bash -c 'cd "$WORKSPACE" && cargo clean --release && cargo build --release --locked'
 
       - name: Build Debian package
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
-            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" CC=clang \
             BUILD_REVISION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             /bin/bash -c 'cd "$WORKSPACE" && cargo deb --locked --deb-revision "$BUILD_REVISION"'
 
@@ -99,7 +100,7 @@ jobs:
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
-            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" CC=clang \
             BUILD_REVISION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             /bin/bash -c 'cd "$WORKSPACE" && strip -s target/release/mugonat-portal && cargo generate-rpm --set-metadata "release = \"$BUILD_REVISION\""'
 
@@ -107,7 +108,7 @@ jobs:
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
-            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
+            PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" CC=clang \
             BUILD_REVISION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             APPIMAGE_EXTRACT_AND_RUN=1 \
             /bin/bash -c '
