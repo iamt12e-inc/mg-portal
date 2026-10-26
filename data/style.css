@@ -1,0 +1,52 @@
+.status-card {
+  padding: 22px;
+  border-radius: 14px;
+  background-color: alpha(@theme_fg_color, 0.05);
+}
+
+.status-icon {
+  padding: 12px;
+  border-radius: 999px;
+  color: @theme_selected_bg_color;
+  background-color: alpha(@theme_selected_bg_color, 0.14);
+}
+
+.status-detail {
+  color: @theme_fg_color;
+}
+
+.status-card.status-online {
+  background-color: alpha(@success_color, 0.12);
+}
+
+.status-card.status-online .status-icon {
+  color: @success_color;
+  background-color: alpha(@success_color, 0.18);
+}
+
+.status-card.status-attention {
+  background-color: alpha(@warning_color, 0.12);
+}
+
+.status-card.status-attention .status-icon {
+  color: @warning_color;
+  background-color: alpha(@warning_color, 0.18);
+}
+
+.status-card.status-error {
+  background-color: alpha(@error_color, 0.10);
+}
+
+.status-card.status-error .status-icon {
+  color: @error_color;
+  background-color: alpha(@error_color, 0.16);
+}
+
+.settings-input {
+  border-radius: 10px;
+}
+
+switch.autostart-enabled {
+  color: @theme_selected_fg_color;
+  background-color: @theme_selected_bg_color;
+}

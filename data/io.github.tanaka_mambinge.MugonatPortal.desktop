@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mugonat Portal
+Comment=Automatically sign in to selected Wi-Fi portals
+Exec=mugonat-portal
+Icon=mugonat-portal
+Terminal=false
+Categories=Network;Utility;
+StartupNotify=true

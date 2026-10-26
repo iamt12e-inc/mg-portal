@@ -1,0 +1,8 @@
+/target/
+/build/
+/repo/
+/dist/
+/AppDir/
+*.log
+
+/tmp/

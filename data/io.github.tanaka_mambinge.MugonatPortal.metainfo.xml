@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.tanaka_mambinge.MugonatPortal</id>
+  <name>Mugonat Portal</name>
+  <summary>Automatically sign in to selected Wi-Fi portals</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Monitors selected NetworkManager Wi-Fi connections and signs in to a trusted captive portal when a session expires.</p>
+  </description>
+  <launchable type="desktop-id">io.github.tanaka_mambinge.MugonatPortal.desktop</launchable>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-10-26" />
+  </releases>
+</component>

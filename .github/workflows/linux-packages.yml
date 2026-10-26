@@ -1,0 +1,87 @@
+name: Build Linux packages
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: AppImage, Debian, and RPM
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential \
+            libdbus-1-dev \
+            libgtk-4-dev \
+            libsecret-1-dev \
+            patchelf \
+            pkg-config \
+            rpm \
+            wget
+
+      - name: Install Debian and RPM packagers
+        run: |
+          cargo install cargo-deb --locked
+          cargo install cargo-generate-rpm --locked
+
+      - name: Build application
+        run: cargo build --release --locked
+
+      - name: Build Debian package
+        run: cargo deb
+
+      - name: Build RPM package
+        run: |
+          strip -s target/release/mugonat-portal
+          cargo generate-rpm
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          mkdir -p tmp dist
+          wget --quiet \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+            --output-document=tmp/linuxdeploy.AppImage
+          chmod +x tmp/linuxdeploy.AppImage
+          tmp/linuxdeploy.AppImage \
+            --appdir AppDir \
+            --executable target/release/mugonat-portal \
+            --desktop-file data/io.github.tanaka_mambinge.MugonatPortal.desktop \
+            --icon-file data/icons/hicolor/512x512/apps/mugonat-portal.png \
+            --output appimage
+          appimage_file="$(find . -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage_file"
+          mv "$appimage_file" dist/mugonat-portal-x86_64.AppImage
+
+      - name: Collect installable packages
+        run: |
+          cp target/debian/*.deb dist/
+          cp target/generate-rpm/*.rpm dist/
+          ls -lh dist
+
+      - name: Upload installable packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: mugonat-portal-linux-installers
+          path: dist/*
+          if-no-files-found: error

@@ -1,0 +1,52 @@
+[package]
+name = "mugonat-portal"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+description = "Automatically sign in to a configured Wi-Fi captive portal"
+license = "MIT"
+authors = ["Mugonat Portal contributors"]
+repository = "https://github.com/iamt12e-inc/mg-portal"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1.0"
+gtk = { package = "gtk4", version = "0.11.5" }
+keyring = { version = "3.6.3", default-features = false, features = ["linux-native-sync-persistent", "crypto-rust"] }
+md-5 = "0.10"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "cookies", "form", "rustls"] }
+scraper = "0.29.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+url = "2.5"
+zbus = { version = "5.19.0", features = ["blocking-api"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[package.metadata.deb]
+maintainer = "Mugonat Portal contributors"
+copyright = "2026 Mugonat Portal contributors"
+section = "net"
+priority = "optional"
+depends = "$auto, network-manager"
+extended-description = "A small desktop app for automatic captive portal sign-in on selected NetworkManager Wi-Fi connections."
+assets = [
+    ["target/release/mugonat-portal", "usr/bin/", "755"],
+    ["data/io.github.tanaka_mambinge.MugonatPortal.desktop", "usr/share/applications/", "644"],
+    ["data/io.github.tanaka_mambinge.MugonatPortal.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/icons/hicolor/512x512/apps/mugonat-portal.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/mugonat-portal", dest = "/usr/bin/mugonat-portal", mode = "755" },
+    { source = "data/io.github.tanaka_mambinge.MugonatPortal.desktop", dest = "/usr/share/applications/io.github.tanaka_mambinge.MugonatPortal.desktop", mode = "644" },
+    { source = "data/io.github.tanaka_mambinge.MugonatPortal.metainfo.xml", dest = "/usr/share/metainfo/io.github.tanaka_mambinge.MugonatPortal.metainfo.xml", mode = "644" },
+    { source = "data/icons/hicolor/512x512/apps/mugonat-portal.png", dest = "/usr/share/icons/hicolor/512x512/apps/mugonat-portal.png", mode = "644" },
+]
+
+[package.metadata.generate-rpm.requires]
+NetworkManager = "*"
