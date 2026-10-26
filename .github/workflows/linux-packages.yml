@@ -69,14 +69,14 @@ jobs:
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
             PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
-            /bin/bash -c 'cd "$WORKSPACE" && cargo install cargo-deb --locked && cargo install cargo-generate-rpm --locked'
+            /bin/bash -c 'cd "$WORKSPACE" && cargo install cargo-deb --locked --force && cargo install cargo-generate-rpm --locked --force'
 
       - name: Build application
         run: |
           sudo chroot "$MUGONAT_FOCAL_ROOT" /usr/bin/env \
             HOME="$HOME" CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" \
             PATH="$HOME/.cargo/bin:/usr/bin:/bin" WORKSPACE="$GITHUB_WORKSPACE" \
-            /bin/bash -c 'cd "$WORKSPACE" && cargo build --release --locked'
+            /bin/bash -c 'cd "$WORKSPACE" && cargo clean --release && cargo build --release --locked'
 
       - name: Build Debian package
         run: |
