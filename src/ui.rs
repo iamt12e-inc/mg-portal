@@ -223,7 +223,12 @@ trait BoxAppendExt {
 impl BoxAppendExt for gtk::Box {
     fn append(&self, child: &impl IsA<gtk::Widget>) {
         let child = child.as_ref();
-        self.pack_start(child, child.hexpands() || child.vexpands(), true, 0);
+        let expands = match self.orientation() {
+            gtk::Orientation::Horizontal => child.hexpands(),
+            gtk::Orientation::Vertical => child.vexpands(),
+            _ => false,
+        };
+        self.pack_start(child, expands, true, 0);
     }
 }
 
