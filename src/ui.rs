@@ -62,6 +62,8 @@ pub fn install(app: &gtk::Application, settings: Arc<Mutex<Settings>>) {
         portal_url: None,
         can_try_sign_in: false,
     }));
+    let background_hold: Rc<RefCell<Option<gio::ApplicationHoldGuard>>> =
+        Rc::new(RefCell::new(None));
 
     let settings_for_startup = settings.clone();
     let widgets_for_startup = widgets.clone();
@@ -71,6 +73,14 @@ pub fn install(app: &gtk::Application, settings: Arc<Mutex<Settings>>) {
     let refresh_receiver_for_startup = refresh_receiver.clone();
     app.connect_startup(move |app| {
         install_styles();
+        match settings_for_startup.lock() {
+            Ok(settings) => {
+                if let Err(error) = request_background(settings.auto_start) {
+                    eprintln!("Could not sync login startup: {error:#}");
+                }
+            }
+            Err(_) => eprintln!("Could not read the login startup preference."),
+        }
         let sender = status_sender.clone();
         let settings = settings_for_startup.clone();
         if let Some(refresh_receiver) = refresh_receiver_for_startup.borrow_mut().take() {
@@ -138,6 +148,7 @@ pub fn install(app: &gtk::Application, settings: Arc<Mutex<Settings>>) {
     let settings_for_activate = settings.clone();
     let widgets_for_activate = widgets.clone();
     let status_for_activate = current_status.clone();
+    let background_hold_for_activate = background_hold.clone();
     let background_sender = background_sender.clone();
     let refresh_sender_for_activate = refresh_sender.clone();
     app.connect_activate(move |app| {
@@ -148,6 +159,7 @@ pub fn install(app: &gtk::Application, settings: Arc<Mutex<Settings>>) {
                 status_for_activate.clone(),
                 background_sender.clone(),
                 refresh_sender_for_activate.clone(),
+                background_hold_for_activate.clone(),
             );
             *widgets_for_activate.borrow_mut() = Some(built);
         }
@@ -157,8 +169,6 @@ pub fn install(app: &gtk::Application, settings: Arc<Mutex<Settings>>) {
         }
     });
 
-    let background_hold: Rc<RefCell<Option<gio::ApplicationHoldGuard>>> =
-        Rc::new(RefCell::new(None));
     let background_hold_for_command_line = background_hold.clone();
     app.connect_command_line(move |app, command_line| {
         let args = command_line.arguments();
@@ -223,6 +233,7 @@ fn page_with_scrollbar(scroll: &gtk::ScrolledWindow) -> gtk::Box {
     scrollbar.set_vexpand(true);
     scrollbar.set_margin_start(4);
     scrollbar.set_visible(false);
+    scrollbar.set_no_show_all(true);
 
     let scrollbar_for_range = scrollbar.clone();
     adjustment.connect_changed(move |adjustment| {
@@ -260,6 +271,7 @@ fn build_window(
     current_status: Rc<RefCell<AppStatus>>,
     background_sender: mpsc::Sender<BackgroundResult>,
     refresh_sender: mpsc::Sender<worker::MonitorCommand>,
+    background_hold: Rc<RefCell<Option<gio::ApplicationHoldGuard>>>,
 ) -> Widgets {
     let snapshot = settings
         .lock()
@@ -367,6 +379,7 @@ fn build_window(
         .add_class("suggested-action");
     try_sign_in_button.set_halign(gtk::Align::Start);
     try_sign_in_button.set_visible(false);
+    try_sign_in_button.set_no_show_all(true);
 
     let portal_address = gtk::Label::builder()
         .label("")
@@ -389,6 +402,7 @@ fn build_window(
     portal_section.append(&portal_address);
     portal_section.append(&open_portal_button);
     portal_section.set_visible(false);
+    portal_section.set_no_show_all(true);
     status_content.append(&portal_section);
 
     let hotspot_status_button = gtk::Button::with_label("View hotspot usage");
@@ -503,6 +517,7 @@ fn build_window(
     let credential_help = helper_label(credential_description);
     let credentials_feedback = helper_label("");
     credentials_feedback.set_visible(false);
+    credentials_feedback.set_no_show_all(true);
     let credentials_box = gtk::Box::new(gtk::Orientation::Vertical, 8);
     credentials_box.append(&username_entry);
     credentials_box.append(&password_entry);
@@ -537,6 +552,7 @@ fn build_window(
     auto_start_row.append(&auto_start_switch);
     let background_feedback = helper_label("");
     background_feedback.set_visible(false);
+    background_feedback.set_no_show_all(true);
     let background_heading = section_heading("Background startup");
     let background_section = gtk::Box::new(gtk::Orientation::Vertical, 10);
     background_section.append(&background_heading);
@@ -559,6 +575,36 @@ fn build_window(
     about_section.append(&version_label);
     about_section.append(&build_label);
     settings_content.append(&about_section);
+
+    settings_content.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+
+    let close_heading = section_heading("Close Mugonat Portal");
+    let close_description = helper_label(
+        "Close the window and keep sign-in monitoring in the background, or quit to stop the app.",
+    );
+    let close_button = gtk::Button::with_label("Close window and keep running");
+    close_button.set_halign(gtk::Align::End);
+    let window_for_close = window.clone();
+    let app_for_close = app.clone();
+    let background_hold_for_close = background_hold.clone();
+    close_button.connect_clicked(move |_| {
+        keep_running_in_background(&app_for_close, &background_hold_for_close);
+        window_for_close.hide();
+    });
+    let quit_button = gtk::Button::with_label("Quit Mugonat Portal");
+    quit_button.set_halign(gtk::Align::End);
+    let app_for_quit = app.clone();
+    let background_hold_for_quit = background_hold.clone();
+    quit_button.connect_clicked(move |_| {
+        background_hold_for_quit.borrow_mut().take();
+        app_for_quit.quit();
+    });
+    let exit_section = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    exit_section.append(&close_heading);
+    exit_section.append(&close_description);
+    exit_section.append(&close_button);
+    exit_section.append(&quit_button);
+    settings_content.append(&exit_section);
 
     let status_page = page_with_scrollbar(&status_scroll);
     let settings_page = page_with_scrollbar(&settings_scroll);
@@ -590,6 +636,7 @@ fn build_window(
     };
 
     widgets.connection_feedback.set_visible(false);
+    widgets.connection_feedback.set_no_show_all(true);
     status_content.append(&widgets.connection_feedback);
 
     connect_network_save_button(&widgets, settings.clone());
@@ -606,12 +653,25 @@ fn build_window(
     connect_auto_start(&widgets, background_sender);
 
     let window = widgets.window.clone();
-    window.connect_delete_event(|window, _event| {
+    let app_for_window_close = app.clone();
+    let background_hold_for_window_close = background_hold;
+    window.connect_delete_event(move |window, _event| {
+        keep_running_in_background(&app_for_window_close, &background_hold_for_window_close);
         window.hide();
         glib::Propagation::Stop
     });
 
+    window.show_all();
     widgets
+}
+
+fn keep_running_in_background(
+    app: &gtk::Application,
+    background_hold: &Rc<RefCell<Option<gio::ApplicationHoldGuard>>>,
+) {
+    if background_hold.borrow().is_none() {
+        *background_hold.borrow_mut() = Some(app.hold());
+    }
 }
 
 fn connect_try_sign_in_button(
@@ -755,11 +815,14 @@ fn request_background(enable: bool) -> Result<()> {
     if enable {
         fs::create_dir_all(&autostart_dir)
             .context("Could not create the desktop startup folder")?;
-        let executable = std::env::current_exe().context("Could not locate Mugonat Portal")?;
+        let executable = startup_executable()?;
         let exec_path = escape_desktop_entry_argument(&executable.to_string_lossy());
         let entry = format!(
             "[Desktop Entry]\nType=Application\nName=Mugonat Portal\nComment=Keep Wi-Fi sign-in available\nExec={exec_path} --background\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
         );
+        if fs::read_to_string(&entry_path).ok().as_deref() == Some(entry.as_str()) {
+            return Ok(());
+        }
         let temporary_path = entry_path.with_extension("desktop.tmp");
         fs::write(&temporary_path, entry).context("Could not save the startup setting")?;
         fs::rename(&temporary_path, &entry_path)
@@ -773,6 +836,18 @@ fn request_background(enable: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn startup_executable() -> Result<PathBuf> {
+    if let Some(appimage) = std::env::var_os("APPIMAGE").filter(|value| !value.is_empty()) {
+        let appimage = PathBuf::from(appimage);
+        if !appimage.is_file() {
+            anyhow::bail!("Could not locate the AppImage file");
+        }
+        return fs::canonicalize(appimage).context("Could not locate the AppImage file");
+    }
+
+    std::env::current_exe().context("Could not locate Mugonat Portal")
 }
 
 fn escape_desktop_entry_argument(argument: &str) -> String {
