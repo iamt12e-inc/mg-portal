@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use md5::{Digest, Md5};
 use reqwest::blocking::{Client, Response};
 use reqwest::redirect::Policy;
@@ -9,7 +9,8 @@ use std::time::Duration;
 use url::Url;
 
 const PROBE_URL: &str = "http://connectivitycheck.gstatic.com/generate_204";
-const MAX_PAGE_BYTES: u64 = 1_048_576;
+const PROBE_HOST: &str = "connectivitycheck.gstatic.com";
+const MAX_PAGE_BYTES: u64 = 256 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -25,6 +26,16 @@ pub enum Outcome {
         reason: String,
         submission_made: bool,
     },
+}
+
+pub fn is_probe_url(raw_url: &str) -> bool {
+    Url::parse(raw_url)
+        .ok()
+        .and_then(|url| {
+            url.host_str()
+                .map(|host| host.eq_ignore_ascii_case(PROBE_HOST))
+        })
+        .unwrap_or(false)
 }
 
 #[derive(Debug)]

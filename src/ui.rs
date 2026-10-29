@@ -16,7 +16,6 @@ use std::thread;
 use std::time::Duration;
 
 const APP_ID: &str = "io.github.tanaka_mambinge.MugonatPortal";
-const HOTSPOT_STATUS_URL: &str = "http://login.net/status";
 
 struct BackgroundResult {
     enabled: bool,
@@ -33,7 +32,6 @@ struct Widgets {
     portal_section: gtk::Box,
     portal_address: gtk::Label,
     open_portal_button: gtk::Button,
-    hotspot_status_button: gtk::Button,
     connection_feedback: gtk::Label,
     network_view: gtk::TextView,
     network_save_button: gtk::Button,
@@ -410,20 +408,7 @@ fn build_window(
     portal_section.set_no_show_all(true);
     status_content.append(&portal_section);
 
-    let hotspot_status_button = gtk::Button::with_label("View hotspot usage");
-    hotspot_status_button.style_context().add_class("flat");
-    hotspot_status_button.set_halign(gtk::Align::Start);
-    let connection_actions = gtk::FlowBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .row_spacing(4)
-        .column_spacing(8)
-        .min_children_per_line(1)
-        .max_children_per_line(2)
-        .build();
-    connection_actions.set_hexpand(true);
-    connection_actions.insert(&try_sign_in_button, -1);
-    connection_actions.insert(&hotspot_status_button, -1);
-    status_content.append(&connection_actions);
+    status_content.append(&try_sign_in_button);
 
     let settings_heading = gtk::Label::builder()
         .label("Settings")
@@ -626,7 +611,6 @@ fn build_window(
         portal_section,
         portal_address,
         open_portal_button,
-        hotspot_status_button,
         connection_feedback: helper_label(""),
         network_view,
         network_save_button,
@@ -648,13 +632,6 @@ fn build_window(
     connect_credentials_save_button(&widgets, settings.clone());
     connect_try_sign_in_button(&widgets, refresh_sender.clone(), current_status.clone());
     connect_open_portal_button(&widgets, current_status);
-    widgets.hotspot_status_button.connect_clicked(|_| {
-        if let Err(error) =
-            gio::AppInfo::launch_default_for_uri(HOTSPOT_STATUS_URL, None::<&gio::AppLaunchContext>)
-        {
-            eprintln!("Could not open hotspot usage: {error}");
-        }
-    });
     connect_auto_start(&widgets, background_sender);
 
     let window = widgets.window.clone();
@@ -921,19 +898,6 @@ fn handle_status_attention(app: &gtk::Application, status: &AppStatus) {
     let notification = gio::Notification::new(&status.title);
     notification.set_body(Some(&status.detail));
     app.send_notification(Some("portal-attention"), &notification);
-
-    if matches!(
-        status.kind,
-        StatusKind::NeedsCredentials | StatusKind::Manual
-    ) {
-        if let Some(url) = status.portal_url.as_deref() {
-            if let Err(error) =
-                gio::AppInfo::launch_default_for_uri(url, None::<&gio::AppLaunchContext>)
-            {
-                eprintln!("Could not open the portal page: {error}");
-            }
-        }
-    }
 }
 
 fn text_view_lines(view: &gtk::TextView) -> Vec<String> {

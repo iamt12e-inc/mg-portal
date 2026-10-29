@@ -1,11 +1,13 @@
 use crate::{config::Settings, credentials, network, portal};
 use std::sync::{
-    Arc, Mutex,
     mpsc::{Receiver, Sender},
+    Arc, Mutex,
 };
 use std::time::{Duration, Instant};
 
 const PORTAL_POLL_INTERVAL: Duration = Duration::from_secs(2);
+const PORTAL_RETRY_START_INTERVAL: Duration = Duration::from_secs(30);
+const PORTAL_RETRY_MAX_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const NETWORK_STATE_POLL_INTERVAL: Duration = Duration::from_millis(500);
 const BACKGROUND_STATE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -46,7 +48,9 @@ impl AppStatus {
     }
 
     fn with_portal(mut self, page_url: String) -> Self {
-        self.portal_url = Some(page_url);
+        if !portal::is_probe_url(&page_url) {
+            self.portal_url = Some(page_url);
+        }
         self
     }
 
@@ -65,7 +69,8 @@ pub fn run(
     let mut last_ssid: Option<String> = None;
     let mut last_attempt_key: Option<String> = None;
     let mut failed_submission_key: Option<String> = None;
-    let mut last_check = Instant::now() - PORTAL_POLL_INTERVAL;
+    let mut poll_interval = PORTAL_POLL_INTERVAL;
+    let mut last_check = Instant::now() - poll_interval;
     let mut force_submission_once = false;
 
     loop {
@@ -85,6 +90,7 @@ pub fn run(
                     &command_receiver,
                     Duration::from_secs(10),
                     &mut last_check,
+                    &mut poll_interval,
                     &mut last_attempt_key,
                     &mut force_submission_once,
                 );
@@ -109,6 +115,7 @@ pub fn run(
                     &command_receiver,
                     BACKGROUND_STATE_POLL_INTERVAL,
                     &mut last_check,
+                    &mut poll_interval,
                     &mut last_attempt_key,
                     &mut force_submission_once,
                 );
@@ -121,7 +128,8 @@ pub fn run(
             last_attempt_key = None;
             failed_submission_key = None;
             force_submission_once = false;
-            last_check = Instant::now() - PORTAL_POLL_INTERVAL;
+            poll_interval = PORTAL_POLL_INTERVAL;
+            last_check = Instant::now() - poll_interval;
             publish(
                 &sender,
                 &mut last_status,
@@ -135,6 +143,7 @@ pub fn run(
                 &command_receiver,
                 BACKGROUND_STATE_POLL_INTERVAL,
                 &mut last_check,
+                &mut poll_interval,
                 &mut last_attempt_key,
                 &mut force_submission_once,
             );
@@ -146,7 +155,8 @@ pub fn run(
             last_attempt_key = None;
             failed_submission_key = None;
             force_submission_once = false;
-            last_check = Instant::now() - PORTAL_POLL_INTERVAL;
+            poll_interval = PORTAL_POLL_INTERVAL;
+            last_check = Instant::now() - poll_interval;
         }
 
         if !snapshot
@@ -170,6 +180,7 @@ pub fn run(
                 &command_receiver,
                 BACKGROUND_STATE_POLL_INTERVAL,
                 &mut last_check,
+                &mut poll_interval,
                 &mut last_attempt_key,
                 &mut force_submission_once,
             );
@@ -177,13 +188,14 @@ pub fn run(
         }
 
         let attempt_key = format!("{}|{}", ssid, snapshot.revision);
-        let due = last_check.elapsed() >= PORTAL_POLL_INTERVAL;
+        let due = last_check.elapsed() >= poll_interval;
         let changed = last_attempt_key.as_deref() != Some(attempt_key.as_str());
         if !due && !changed {
             wait_for_command(
                 &command_receiver,
                 NETWORK_STATE_POLL_INTERVAL,
                 &mut last_check,
+                &mut poll_interval,
                 &mut last_attempt_key,
                 &mut force_submission_once,
             );
@@ -196,6 +208,7 @@ pub fn run(
             Err(error) => {
                 eprintln!("Could not read saved sign-in details: {error:#}");
                 last_attempt_key = Some(attempt_key);
+                poll_interval = next_retry_interval(poll_interval);
                 publish(
                     &sender,
                     &mut last_status,
@@ -220,6 +233,7 @@ pub fn run(
             Ok(portal::Outcome::Online) => {
                 failed_submission_key = None;
                 last_attempt_key = Some(attempt_key);
+                poll_interval = PORTAL_POLL_INTERVAL;
                 publish(
                     &sender,
                     &mut last_status,
@@ -234,6 +248,7 @@ pub fn run(
             Ok(portal::Outcome::SignedIn) => {
                 failed_submission_key = None;
                 last_attempt_key = Some(attempt_key);
+                poll_interval = PORTAL_POLL_INTERVAL;
                 publish(
                     &sender,
                     &mut last_status,
@@ -247,6 +262,7 @@ pub fn run(
             }
             Ok(portal::Outcome::NeedsCredentials { page_url }) => {
                 last_attempt_key = Some(attempt_key);
+                poll_interval = next_retry_interval(poll_interval);
                 publish(
                     &sender,
                     &mut last_status,
@@ -267,6 +283,7 @@ pub fn run(
                     failed_submission_key = Some(attempt_key.clone());
                 }
                 last_attempt_key = Some(attempt_key);
+                poll_interval = next_retry_interval(poll_interval);
                 let status =
                     AppStatus::new(StatusKind::Manual, "Sign-in needs your attention", reason)
                         .with_sign_in_action();
@@ -279,6 +296,7 @@ pub fn run(
             Err(error) => {
                 eprintln!("Could not check the sign-in page: {error:#}");
                 last_attempt_key = Some(attempt_key);
+                poll_interval = next_retry_interval(poll_interval);
                 publish(
                     &sender,
                     &mut last_status,
@@ -295,6 +313,7 @@ pub fn run(
             &command_receiver,
             NETWORK_STATE_POLL_INTERVAL,
             &mut last_check,
+            &mut poll_interval,
             &mut last_attempt_key,
             &mut force_submission_once,
         );
@@ -305,6 +324,7 @@ fn wait_for_command(
     receiver: &Receiver<MonitorCommand>,
     timeout: Duration,
     last_check: &mut Instant,
+    poll_interval: &mut Duration,
     last_attempt_key: &mut Option<String>,
     force_submission_once: &mut bool,
 ) {
@@ -314,11 +334,23 @@ fn wait_for_command(
                 command = next;
             }
         }
-        *last_check = Instant::now() - PORTAL_POLL_INTERVAL;
+        *poll_interval = PORTAL_POLL_INTERVAL;
+        *last_check = Instant::now() - *poll_interval;
         *last_attempt_key = None;
         if command == MonitorCommand::ForceSignIn {
             *force_submission_once = true;
         }
+    }
+}
+
+fn next_retry_interval(current: Duration) -> Duration {
+    if current < PORTAL_RETRY_START_INTERVAL {
+        PORTAL_RETRY_START_INTERVAL
+    } else {
+        current
+            .checked_mul(2)
+            .unwrap_or(PORTAL_RETRY_MAX_INTERVAL)
+            .min(PORTAL_RETRY_MAX_INTERVAL)
     }
 }
 
